@@ -1,10 +1,13 @@
-const SIGNAL_SERVER = "wss://obs-group-signal-server.onrender.com"; // your server
+const SIGNAL_SERVER = "wss://obs-group-signal-server.onrender.com";
 const socket = new WebSocket(SIGNAL_SERVER);
 const video = document.getElementById("localVideo");
 const canvas = document.getElementById("snapshot");
 const ctx = canvas.getContext("2d");
 const groupView = document.getElementById("groupView");
-const clientId = Math.random().toString(36).slice(2); // Simple ID for now
+const clientId = Math.random().toString(36).slice(2);
+
+let lastSent = 0;
+const SEND_INTERVAL = 300; // milliseconds
 
 socket.addEventListener("open", () => {
   console.log("🟢 WebSocket connected");
@@ -17,6 +20,8 @@ socket.addEventListener("message", (event) => {
     if (!img) {
       img = document.createElement("img");
       img.id = "img_" + msg.id;
+      img.style.maxWidth = "30%";
+      img.style.margin = "0.5em";
       groupView.appendChild(img);
     }
     img.src = msg.data;
@@ -29,13 +34,32 @@ async function startCamera() {
     video.srcObject = stream;
     console.log("📷 Camera started");
 
-    setInterval(() => {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const sendFrame = () => {
+      const now = Date.now();
+      if (now - lastSent < SEND_INTERVAL) {
+        requestAnimationFrame(sendFrame);
+        return;
+      }
+
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w === 0 || h === 0) {
+        requestAnimationFrame(sendFrame);
+        return;
+      }
+
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
       socket.send(JSON.stringify({ type: "image", id: clientId, data: dataUrl }));
-    }, 500); // send every 0.5s
+      lastSent = now;
+
+      requestAnimationFrame(sendFrame);
+    };
+
+    requestAnimationFrame(sendFrame);
+
   } catch (err) {
     console.error("🚫 Camera error:", err);
   }
