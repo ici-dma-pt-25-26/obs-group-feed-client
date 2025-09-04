@@ -7,7 +7,7 @@ const groupView = document.getElementById("groupView");
 const clientId = Math.random().toString(36).slice(2);
 
 let lastSent = 0;
-const SEND_INTERVAL = 300; // milliseconds
+const SEND_INTERVAL = 300;
 
 socket.addEventListener("open", () => {
   console.log("🟢 WebSocket connected");
@@ -20,8 +20,6 @@ socket.addEventListener("message", (event) => {
     if (!img) {
       img = document.createElement("img");
       img.id = "img_" + msg.id;
-      img.style.maxWidth = "30%";
-      img.style.margin = "0.5em";
       groupView.appendChild(img);
     }
     img.src = msg.data;
@@ -59,7 +57,6 @@ async function startCamera() {
     };
 
     requestAnimationFrame(sendFrame);
-
   } catch (err) {
     console.error("🚫 Camera error:", err);
   }

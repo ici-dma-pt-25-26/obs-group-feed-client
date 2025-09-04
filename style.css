@@ -1,0 +1,40 @@
+body {
+  margin: 0;
+  padding: 1vw;
+  background: #000;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1vw;
+}
+
+#localVideo,
+#groupView img {
+  width: 20vw;
+  max-width: 360px;
+  height: auto;
+  background: #111;
+  object-fit: cover;
+  border: 2px solid #333;
+  border-radius: 4px;
+}
+
+canvas {
+  display: none;
+}
+
+#groupView {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1vw;
+}
+
+/* Mobile friendly tweaks */
+@media (max-width: 768px) {
+  #localVideo,
+  #groupView img {
+    width: 45vw;
+  }
+}
