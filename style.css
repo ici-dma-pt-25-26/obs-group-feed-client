@@ -12,10 +12,17 @@ body {
   padding: 8px;
 }
 
-video {
+.tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  background: #111;
+}
+
+.tile > video {
   width: 100%;
   aspect-ratio: 16/9;
-  background: #111;
   border: 2px solid #222;
   object-fit: cover;
 }

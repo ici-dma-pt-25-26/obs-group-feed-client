@@ -47,12 +47,21 @@ async function join() {
     }
   });
 
-  room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
-    const v = document.getElementById("v_" + participant.identity);
-    if (v) {
-      try { track.detach(v); } catch {}
+  function removeTile(pid) {
+    const v = document.getElementById("v_" + pid);
+    if (v && v.parentElement) {
+      // remove wrapper entirely to avoid empty grid holes
+      const wrap = v.parentElement;
+      wrap.parentElement && wrap.parentElement.removeChild(wrap);
     }
-    if (v && v.parentElement) v.parentElement.removeChild(v);
+  }
+
+  room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+    removeTile(participant.identity);
+  });
+
+  room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+    removeTile(participant.identity);
   });
 
   room.on(RoomEvent.ConnectionStateChanged, (s) => {
@@ -86,10 +95,10 @@ async function join() {
   });
 
   // Receive data
-  room.on(RoomEvent.DataReceived, (payload, participant, topic) => {
+  room.on(RoomEvent.DataReceived, (payload, participant, maybeTopic) => {
     try {
       const msg = JSON.parse(new TextDecoder().decode(payload));
-      if (topic === "emoji" && msg.type === "emoji") {
+      if (msg.type === "emoji") {
         if (msg.target) pushEmojiTarget(msg.emoji, msg.target, msg.ox, msg.oy);
         else pushEmoji(msg.emoji);
       }
