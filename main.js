@@ -1,34 +1,7 @@
-import * as mediasoupClient from "https://esm.sh/mediasoup-client@3";
+import { Room, RoomEvent, createLocalVideoTrack, createLocalAudioTrack, ConnectionState } from "https://esm.sh/livekit-client@2";
 
-// --- FIXED WebSocket URL: Render-hosted ---
-const WS_URL = "wss://obs-group-signal-server.onrender.com/ws"; // Render WebSocket endpoint
-
-console.log("Connecting to", WS_URL);
-const ws = new WebSocket(WS_URL);
-const id = Math.random().toString(36).slice(2);
-
+const TOKEN_ENDPOINT = "https://obs-group-signal-server.onrender.com/token";
 const grid = document.getElementById("grid");
-
-const state = {
-  device: null,
-  sendTransport: null,
-  recvTransport: null,
-  consumers: new Map(),
-};
-
-// Helper: send JSON
-const send = (o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
-const onceMsg = (type) =>
-  new Promise((res) => {
-    const h = (ev) => {
-      const m = JSON.parse(ev.data);
-      if (m.type === type) {
-        ws.removeEventListener("message", h);
-        res(m);
-      }
-    };
-    ws.addEventListener("message", h);
-  });
 
 // Create or reuse a video element
 function tile(peerId) {
@@ -43,128 +16,41 @@ function tile(peerId) {
   return v;
 }
 
-// Boot
-ws.addEventListener("open", async () => {
-  console.log("🟢 WebSocket open");
+async function join() {
+  // fetch token and LiveKit URL from your Render server
+  const identity = Math.random().toString(36).slice(2);
+  const res = await fetch(`${TOKEN_ENDPOINT}?identity=${identity}`);
+  const { token, url } = await res.json();
 
-  send({ type: "join", id });
-  const joined = await onceMsg("joined");
+  const room = new Room({ adaptiveStream: true, dynacast: true });
 
-  // 1. Device
-  const device = new mediasoupClient.Device();
-  await device.load({ routerRtpCapabilities: joined.routerRtpCapabilities });
-  state.device = device;
+  // Local publish
+  const cam = await createLocalVideoTrack({ resolution: { width: 640, height: 360 } });
+  const me = tile("me");
+  me.muted = true;
+  me.srcObject = new MediaStream([cam.mediaStreamTrack]);
+  try { await me.play(); } catch {}
 
-  // 2. Recv transport first to avoid race on early new-producer
-  send({ type: "create-recv-transport" });
-  const tRecv = await onceMsg("recv-transport-created");
-  const recvTransport = device.createRecvTransport(tRecv);
-  state.recvTransport = recvTransport;
-  recvTransport.on("connect", ({ dtlsParameters }, cb) => {
-    send({ type: "connect-transport", transportId: tRecv.id, dtlsParameters });
-    onceMsg("transport-connected").then(() => cb());
-  });
-
-  // 3. Send transport
-  send({ type: "create-send-transport" });
-  const tSend = await onceMsg("send-transport-created");
-  const sendTransport = device.createSendTransport(tSend);
-  state.sendTransport = sendTransport;
-
-  sendTransport.on("connect", ({ dtlsParameters }, cb) => {
-    send({ type: "connect-transport", transportId: tSend.id, dtlsParameters });
-    onceMsg("transport-connected").then(() => cb());
-  });
-
-  sendTransport.on("produce", ({ kind, rtpParameters }, cb) => {
-    send({ type: "produce", transportId: tSend.id, kind, rtpParameters });
-    onceMsg("produced").then(({ producerId }) => cb({ id: producerId }));
-  });
-
-  // 4. Camera
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: 640, height: 360, frameRate: 24 },
-    audio: false,
-  });
-  const localTile = tile("me");
-  localTile.muted = true;
-  localTile.srcObject = stream;
-  await sendTransport.produce({
-    track: stream.getVideoTracks()[0],
-    // Simulcast encodings for SFU scaling (low/med/high)
-    encodings: [
-      { maxBitrate: 150_000, scaleResolutionDownBy: 4 },
-      { maxBitrate: 450_000, scaleResolutionDownBy: 2 },
-      { maxBitrate: 900_000, scaleResolutionDownBy: 1 },
-    ],
-    codecOptions: { videoGoogleStartBitrate: 1000 },
-  });
-
-  send({ type: "save-rtp-capabilities", rtpCapabilities: device.rtpCapabilities });
-
-  // rtpCapabilities saved after device load; server will now announce existing producers
-});
-
-// Incoming WS messages
-ws.addEventListener("message", async (ev) => {
-  const msg = JSON.parse(ev.data);
-
-  if (msg.type === "new-producer" && msg.kind === "video") {
-    send({
-      type: "consume",
-      producerId: msg.producerId,
-      rtpCapabilities: state.device.rtpCapabilities,
-      transportId: state.recvTransport.id,
-    });
-    const c = await Promise.race([
-      onceMsg("consumed"),
-      onceMsg("consume-error"),
-    ]);
-    if (c.type === "consume-error") {
-      console.warn("⚠️ consume-error from server (codec/NAT?)");
-      return;
+  room.on(RoomEvent.TrackSubscribed, async (track, pub, participant) => {
+    if (track.kind === "video") {
+      const v = tile(participant.identity);
+      v.srcObject = new MediaStream([track.mediaStreamTrack]);
+      v.muted = true;
+      try { await v.play(); } catch {}
     }
-    const consumer = await state.recvTransport.consume({
-      id: c.id,
-      producerId: c.producerId,
-      kind: c.kind,
-      rtpParameters: c.rtpParameters,
-    });
-    state.consumers.set(consumer.id, consumer);
+  });
 
-    const v = tile(msg.peerId);
-    const s = new MediaStream();
-    s.addTrack(consumer.track);
-    v.srcObject = s;
-    v.muted = true; // ensure autoplay across browsers
-    try { await v.play(); } catch {}
-
-    send({ type: "resume", consumerId: consumer.id });
-  }
-
-  if (msg.type === "emoji" && msg.from !== id) {
-    // TODO: render emoji overlay here
-    console.log("🎉 Emoji from", msg.from, msg.emoji);
-  }
-
-  if (msg.type === "producer-closed") {
-    // Remove tile and associated consumer if any
-    const v = document.getElementById("v_" + msg.peerId);
+  room.on(RoomEvent.TrackUnsubscribed, (_track, _pub, participant) => {
+    const v = document.getElementById("v_" + participant.identity);
     if (v && v.parentElement) v.parentElement.removeChild(v);
-    for (const [cid, consumer] of state.consumers) {
-      if (consumer.producerId === msg.producerId) {
-        try { consumer.close(); } catch {}
-        state.consumers.delete(cid);
-      }
-    }
-  }
-});
+  });
 
-// Emoji sending
-const EMOJI = ["🥳", "❤️", "🔥", "😂", "🤩"];
-window.addEventListener("keydown", (e) => {
-  const i = parseInt(e.key, 10);
-  if (i >= 1 && i <= EMOJI.length) {
-    send({ type: "emoji", emoji: EMOJI[i - 1] });
-  }
-});
+  room.on(RoomEvent.ConnectionStateChanged, (s) => {
+    console.log("LiveKit state:", s);
+  });
+
+  await room.connect(url, token, { autoSubscribe: true });
+  await room.localParticipant.publishTrack(cam);
+}
+
+join().catch((e) => console.error(e));
