@@ -1,33 +1,21 @@
 body {
   margin: 0;
   background: #000;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 1em;
+  color: #ddd;
+  font-family: system-ui, sans-serif;
 }
 
-canvas {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  border: 2px solid #333;
+#grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+
+video {
+  width: 100%;
+  aspect-ratio: 16/9;
   background: #111;
-}
-
-#groupView {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5em;
-}
-
-#groupView img {
-  width: 320px;
-  max-width: 100%;
-  height: auto;
-  background: #111;
-  object-fit: contain;
   border: 2px solid #222;
+  object-fit: cover;
 }
