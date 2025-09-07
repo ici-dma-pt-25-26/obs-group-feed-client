@@ -28,20 +28,23 @@ async function join() {
   const cam = await createLocalVideoTrack({ resolution: { width: 640, height: 360 } });
   const me = tile("me");
   me.muted = true;
-  me.srcObject = new MediaStream([cam.mediaStreamTrack]);
+  cam.attach(me);
   try { await me.play(); } catch {}
 
   room.on(RoomEvent.TrackSubscribed, async (track, pub, participant) => {
     if (track.kind === "video") {
       const v = tile(participant.identity);
-      v.srcObject = new MediaStream([track.mediaStreamTrack]);
-      v.muted = true;
+      track.attach(v);
+      v.muted = true; // video element muted is fine; audio tracks can remain separate
       try { await v.play(); } catch {}
     }
   });
 
-  room.on(RoomEvent.TrackUnsubscribed, (_track, _pub, participant) => {
+  room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
     const v = document.getElementById("v_" + participant.identity);
+    if (v) {
+      try { track.detach(v); } catch {}
+    }
     if (v && v.parentElement) v.parentElement.removeChild(v);
   });
 
