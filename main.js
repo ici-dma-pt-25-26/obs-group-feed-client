@@ -55,7 +55,17 @@ ws.addEventListener("open", async () => {
   await device.load({ routerRtpCapabilities: joined.routerRtpCapabilities });
   state.device = device;
 
-  // 2. Send transport
+  // 2. Recv transport first to avoid race on early new-producer
+  send({ type: "create-recv-transport" });
+  const tRecv = await onceMsg("recv-transport-created");
+  const recvTransport = device.createRecvTransport(tRecv);
+  state.recvTransport = recvTransport;
+  recvTransport.on("connect", ({ dtlsParameters }, cb) => {
+    send({ type: "connect-transport", transportId: tRecv.id, dtlsParameters });
+    onceMsg("transport-connected").then(() => cb());
+  });
+
+  // 3. Send transport
   send({ type: "create-send-transport" });
   const tSend = await onceMsg("send-transport-created");
   const sendTransport = device.createSendTransport(tSend);
@@ -71,7 +81,7 @@ ws.addEventListener("open", async () => {
     onceMsg("produced").then(({ producerId }) => cb({ id: producerId }));
   });
 
-  // 3. Camera
+  // 4. Camera
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { width: 640, height: 360, frameRate: 24 },
     audio: false,
@@ -92,16 +102,7 @@ ws.addEventListener("open", async () => {
 
   send({ type: "save-rtp-capabilities", rtpCapabilities: device.rtpCapabilities });
 
-  // 4. Recv transport
-  send({ type: "create-recv-transport" });
-  const tRecv = await onceMsg("recv-transport-created");
-  const recvTransport = device.createRecvTransport(tRecv);
-  state.recvTransport = recvTransport;
-
-  recvTransport.on("connect", ({ dtlsParameters }, cb) => {
-    send({ type: "connect-transport", transportId: tRecv.id, dtlsParameters });
-    onceMsg("transport-connected").then(() => cb());
-  });
+  // rtpCapabilities saved after device load; server will now announce existing producers
 });
 
 // Incoming WS messages
@@ -115,7 +116,14 @@ ws.addEventListener("message", async (ev) => {
       rtpCapabilities: state.device.rtpCapabilities,
       transportId: state.recvTransport.id,
     });
-    const c = await onceMsg("consumed");
+    const c = await Promise.race([
+      onceMsg("consumed"),
+      onceMsg("consume-error"),
+    ]);
+    if (c.type === "consume-error") {
+      console.warn("⚠️ consume-error from server (codec/NAT?)");
+      return;
+    }
     const consumer = await state.recvTransport.consume({
       id: c.id,
       producerId: c.producerId,
@@ -128,6 +136,8 @@ ws.addEventListener("message", async (ev) => {
     const s = new MediaStream();
     s.addTrack(consumer.track);
     v.srcObject = s;
+    v.muted = true; // ensure autoplay across browsers
+    try { await v.play(); } catch {}
 
     send({ type: "resume", consumerId: consumer.id });
   }
