@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en" class="obs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Group Grid (OBS)</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Ensure super clean output */
+    body { background: #000; margin: 0; }
+  </style>
+  <script>
+    // Force obs mode without query param
+    document.documentElement.classList.add('obs');
+  </script>
+  <script>
+    // Remove overlay entirely for OBS grid page
+    window.__GRID_PAGE__ = true;
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+</head>
+<body>
+  <div id="grid"></div>
+  <div id="overlay"></div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

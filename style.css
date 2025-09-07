@@ -7,7 +7,7 @@ body {
 
 #grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 8px;
   padding: 8px;
 }
@@ -27,6 +27,60 @@ body {
   object-fit: cover;
 }
 
+.label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Small emoji HUD on hover */
+.hud {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.35);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.tile:hover .hud {
+  opacity: 1;
+  pointer-events: auto;
+}
+.hud button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 3px;
+}
+.hud button:active { transform: scale(0.95); }
+
+/* OBS mode trims everything */
+.obs body {
+  background: #000;
+}
+.obs #overlay {
+  display: none;
+}
+.obs .label {
+  display: none;
+}
+.obs .hud {
+  display: none;
+}
+
 .tile {
   position: relative;
   overflow: hidden;
@@ -41,10 +95,15 @@ body {
   z-index: 10;
 }
 
+/* Option to hide overlay dynamically */
+.overlay-hidden #overlay {
+  display: none !important;
+}
+
 @media (min-width: 1200px) {
   #grid { gap: 10px; }
 }
 
 @media (max-width: 600px) {
-  #grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  #grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
