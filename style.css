@@ -7,7 +7,7 @@ body {
 
 #grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
   padding: 8px;
 }
@@ -18,4 +18,26 @@ video {
   background: #111;
   border: 2px solid #222;
   object-fit: cover;
+}
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+@media (min-width: 1200px) {
+  #grid { gap: 10px; }
+}
+
+@media (max-width: 600px) {
+  #grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
