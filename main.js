@@ -1,6 +1,9 @@
 import * as mediasoupClient from "https://esm.sh/mediasoup-client@3";
 
-const WS_URL = location.origin.replace(/^http/, "ws");
+// --- FIXED WebSocket URL: Render-hosted ---
+const WS_URL = "wss://obs-group-signal-server.onrender.com/ws"; // Render WebSocket endpoint
+
+console.log("Connecting to", WS_URL);
 const ws = new WebSocket(WS_URL);
 const id = Math.random().toString(36).slice(2);
 
@@ -13,7 +16,7 @@ const state = {
   consumers: new Map(),
 };
 
-// Helper: send JSON over WS
+// Helper: send JSON
 const send = (o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
 const onceMsg = (type) =>
   new Promise((res) => {
@@ -40,8 +43,10 @@ function tile(peerId) {
   return v;
 }
 
-// WS boot
+// Boot
 ws.addEventListener("open", async () => {
+  console.log("🟢 WebSocket open");
+
   send({ type: "join", id });
   const joined = await onceMsg("joined");
 
@@ -74,7 +79,16 @@ ws.addEventListener("open", async () => {
   const localTile = tile("me");
   localTile.muted = true;
   localTile.srcObject = stream;
-  await sendTransport.produce({ track: stream.getVideoTracks()[0] });
+  await sendTransport.produce({
+    track: stream.getVideoTracks()[0],
+    // Simulcast encodings for SFU scaling (low/med/high)
+    encodings: [
+      { maxBitrate: 150_000, scaleResolutionDownBy: 4 },
+      { maxBitrate: 450_000, scaleResolutionDownBy: 2 },
+      { maxBitrate: 900_000, scaleResolutionDownBy: 1 },
+    ],
+    codecOptions: { videoGoogleStartBitrate: 1000 },
+  });
 
   send({ type: "save-rtp-capabilities", rtpCapabilities: device.rtpCapabilities });
 
@@ -90,7 +104,7 @@ ws.addEventListener("open", async () => {
   });
 });
 
-// WS messages (consuming)
+// Incoming WS messages
 ws.addEventListener("message", async (ev) => {
   const msg = JSON.parse(ev.data);
 
@@ -119,7 +133,20 @@ ws.addEventListener("message", async (ev) => {
   }
 
   if (msg.type === "emoji" && msg.from !== id) {
-    // Handle emoji drawing here
+    // TODO: render emoji overlay here
+    console.log("🎉 Emoji from", msg.from, msg.emoji);
+  }
+
+  if (msg.type === "producer-closed") {
+    // Remove tile and associated consumer if any
+    const v = document.getElementById("v_" + msg.peerId);
+    if (v && v.parentElement) v.parentElement.removeChild(v);
+    for (const [cid, consumer] of state.consumers) {
+      if (consumer.producerId === msg.producerId) {
+        try { consumer.close(); } catch {}
+        state.consumers.delete(cid);
+      }
+    }
   }
 });
 
